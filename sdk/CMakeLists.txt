@@ -48,9 +48,10 @@ target_compile_options(cps2_sdk INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti -fno-threadsafe-statics>
 )
 target_link_options(cps2_sdk INTERFACE
-    -m68000 -T "${CMAKE_SOURCE_DIR}/ld/cps2.ld" -nostdlib -lgcc
+    -m68000 -T "${CMAKE_SOURCE_DIR}/ld/cps2.ld" -nostdlib
     -Wl,--build-id=none
 )
+target_link_libraries(cps2_sdk INTERFACE gcc)
 
 # optional vanilla C11/C17 compatibility wrapper library
 add_library(cps2_sdk_c OBJECT

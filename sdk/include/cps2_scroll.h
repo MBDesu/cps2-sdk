@@ -151,6 +151,41 @@ public:
     print(col, row, palette, buf);
   }
 
+  void fill_rect(int col, int row, int width, int height, uint16_t tile,
+                 uint8_t pal = 0, TileFlip flip = TileFlip::None) const {
+    for (int r = 0; r < height; ++r) {
+      for (int c = 0; c < width; ++c) {
+        put(col + c, row + r, tile, pal, flip);
+      }
+    }
+  }
+
+  void print_uint(int col, int row, uint8_t pal, uint32_t value,
+                  int min_digits = 1) const {
+    static constexpr uint32_t kPowers[10] = {
+        1000000000u, 100000000u, 10000000u, 1000000u, 100000u,
+        10000u,      1000u,      100u,      10u,      1u};
+
+    char buf[11];
+    int cursor = 0;
+    bool started = false;
+    for (int i = 0; i < 10; ++i) {
+      const uint32_t p = kPowers[i];
+      uint8_t digit = 0;
+      while (value >= p) {
+        value -= p;
+        ++digit;
+      }
+      const int remaining = 10 - i;
+      if (digit > 0 || started || remaining <= min_digits) {
+        buf[cursor++] = static_cast<char>('0' + digit);
+        started = true;
+      }
+    }
+    buf[cursor] = '\0';
+    print(col, row, pal, buf);
+  }
+
 private:
   uint32_t word_base_;
 };

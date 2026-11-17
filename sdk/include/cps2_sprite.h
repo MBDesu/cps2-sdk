@@ -32,6 +32,43 @@ struct Sprite {
   SpriteFlip flip = SpriteFlip::None;
 };
 
+struct SpriteAnim {
+  uint32_t base_tile = 0;
+  uint16_t frame_count = 1;
+  uint16_t tiles_per_frame = 1;
+  uint8_t ticks_per_frame = 6;
+  bool loop = true;
+
+  uint16_t frame = 0;
+  uint8_t timer = 0;
+  bool finished = false;
+
+  void reset() {
+    frame = 0;
+    timer = 0;
+    finished = false;
+  }
+
+  void tick() {
+    if (finished || frame_count <= 1 || ticks_per_frame == 0)
+      return;
+    if (++timer >= ticks_per_frame) {
+      timer = 0;
+      if (frame + 1 < frame_count) {
+        ++frame;
+      } else if (loop) {
+        frame = 0;
+      } else {
+        finished = true;
+      }
+    }
+  }
+
+  constexpr uint32_t current_tile() const {
+    return base_tile + static_cast<uint32_t>(frame) * tiles_per_frame;
+  }
+};
+
 namespace sprite {
 
 constexpr uint16_t encode_size(uint8_t width_blocks, uint8_t height_blocks) {
@@ -125,6 +162,27 @@ public:
     const uint8_t w = (spr.width_blocks > 0u) ? spr.width_blocks : 1u;
     const uint8_t h = (spr.height_blocks > 0u) ? spr.height_blocks : 1u;
     draw_ext(spr.x, spr.y, spr.tile, spr.palette, spr.priority, w, h, spr.flip);
+  }
+
+  void draw_meta(int16_t x, int16_t y, uint32_t first_tile, uint8_t w_tiles,
+                 uint8_t h_tiles, uint8_t pal, uint8_t prio = 7,
+                 SpriteFlip flip = SpriteFlip::None) {
+    const bool hflip = (static_cast<uint16_t>(flip) &
+                        static_cast<uint16_t>(SpriteFlip::X)) != 0;
+    const bool vflip = (static_cast<uint16_t>(flip) &
+                        static_cast<uint16_t>(SpriteFlip::Y)) != 0;
+
+    for (uint8_t ty = 0; ty < h_tiles; ++ty) {
+      const uint8_t src_y = vflip ? static_cast<uint8_t>(h_tiles - 1 - ty) : ty;
+      for (uint8_t tx = 0; tx < w_tiles; ++tx) {
+        const uint8_t src_x =
+            hflip ? static_cast<uint8_t>(w_tiles - 1 - tx) : tx;
+        const uint32_t tile =
+            first_tile + static_cast<uint32_t>(src_y) * w_tiles + src_x;
+        draw(static_cast<int16_t>(x + tx * 16),
+             static_cast<int16_t>(y + ty * 16), tile, pal, prio, flip);
+      }
+    }
   }
 
   void end() const { sprite::end(count_); }

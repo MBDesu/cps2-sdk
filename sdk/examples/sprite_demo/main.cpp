@@ -15,6 +15,14 @@ bool g_facing_left = false;
 bool g_moving = false;
 int32_t g_world_x = 0;
 
+cps2::SpriteAnim g_walk_anim{
+    .base_tile = HERO_FIRST_TILE,
+    .frame_count = HERO_TILE_COUNT,
+    .tiles_per_frame = 1,
+    .ticks_per_frame = 8,
+    .loop = true,
+};
+
 constexpr int16_t kGroundY = 160;
 } // namespace
 
@@ -59,6 +67,12 @@ void cps2::on_vblank() {
     }
   }
 
+  if (g_moving) {
+    g_walk_anim.tick();
+  } else {
+    g_walk_anim.reset();
+  }
+
   cps2::set_scroll3_pos(static_cast<int16_t>(g_world_x >> 2), 0);
   cps2::set_scroll2_pos(static_cast<int16_t>(g_world_x), 0);
 
@@ -67,10 +81,9 @@ void cps2::on_vblank() {
 
   cps2::SpriteBatch batch;
   batch.begin();
-  const uint32_t anim_offset = (g_moving && ((g_frame >> 3) & 1u)) ? 1u : 0u;
   const auto flip =
       g_facing_left ? cps2::SpriteFlip::X : cps2::SpriteFlip::None;
-  batch.draw(g_px, g_py, HERO_FIRST_TILE + anim_offset, 0, 7, flip);
+  batch.draw(g_px, g_py, g_walk_anim.current_tile(), 0, 7, flip);
   batch.end();
 
   cps2::palette::commit();
@@ -95,16 +108,11 @@ int main() {
 
   cps2::Scroll3.clear(static_cast<uint16_t>(BG_FIRST_TILE), 0);
   cps2::Scroll2.clear(0x0000u, 0);
-  for (int col = 0; col < 64; ++col) {
-    for (int row = 12; row < 16; ++row) {
-      cps2::Scroll2.put(col, row, static_cast<uint16_t>(BG_FIRST_TILE + 1u), 0);
-    }
-  }
+  cps2::Scroll2.fill_rect(0, 12, 64, 4,
+                          static_cast<uint16_t>(BG_FIRST_TILE + 1u), 0);
 
   cps2::Scroll1.clear(' ', 0);
   cps2::Scroll1.print(cps2::kScr1Left + 1, cps2::kScr1Top + 1, 0, "WORLD X:");
-  cps2::Scroll1.print(cps2::kScr1Left + 1, cps2::kScr1Top + 2, 0,
-                      "D-PAD: MOVE   BTN1: JUMP");
 
   for (;;) {
     cps2::halt_until_vblank();

@@ -38,6 +38,14 @@ enum {
   CPS2_BTN_COIN = 1u << 9
 };
 
+// Viewport constants
+enum {
+  CPS2_SCR1_LEFT = 8,
+  CPS2_SCR1_TOP = 2,
+  CPS2_SCR1_COLS = 48,
+  CPS2_SCR1_ROWS = 28,
+};
+
 // Sprite flip flags
 enum {
   CPS2_SPR_NONE = 0u,
@@ -45,6 +53,31 @@ enum {
   CPS2_SPR_FLIP_Y = 1u << 1,
   CPS2_SPR_FLIP_XY = 3u
 };
+
+typedef struct Cps2SpriteAnim {
+  uint32_t base_tile;
+  uint16_t frame_count;
+  uint16_t tiles_per_frame;
+  uint8_t ticks_per_frame;
+  bool loop;
+  uint16_t frame;
+  uint8_t timer;
+  bool finished;
+} Cps2SpriteAnim;
+
+void cps2_scroll_fill_rect(uint8_t plane, int col, int row, int width,
+                           int height, uint16_t tile, uint8_t pal);
+void cps2_scroll_box(uint8_t plane, int col, int row, int width, int height,
+                     uint8_t pal);
+void cps2_scroll_print_uint(uint8_t plane, int col, int row, uint8_t pal,
+                            uint32_t value, int min_digits);
+
+void cps2_batch_draw_meta(int16_t x, int16_t y, uint32_t first_tile,
+                          uint8_t w_tiles, uint8_t h_tiles, uint8_t pal,
+                          uint8_t prio, uint8_t flip);
+void cps2_anim_reset(Cps2SpriteAnim *anim);
+void cps2_anim_tick(Cps2SpriteAnim *anim);
+uint32_t cps2_anim_tile(const Cps2SpriteAnim *anim);
 
 // User-implemented VBlank callback
 void cps2_on_vblank(void);

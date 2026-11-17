@@ -87,6 +87,82 @@ void cps2_scroll_print_hex(uint8_t p, int col, int row, uint8_t pal, uint32_t v,
   }
 }
 
+void cps2_scroll_fill_rect(uint8_t p, int col, int row, int w, int h,
+                           uint16_t tile, uint8_t pal) {
+  switch (p) {
+  case 2:
+    cps2::Scroll2.fill_rect(col, row, w, h, tile, pal);
+    break;
+  case 3:
+    cps2::Scroll3.fill_rect(col, row, w, h, tile, pal);
+    break;
+  default:
+    cps2::Scroll1.fill_rect(col, row, w, h, tile, pal);
+    break;
+  }
+}
+
+void cps2_scroll_box(uint8_t p, int col, int row, int w, int h, uint8_t pal) {
+  switch (p) {
+  case 2:
+    cps2::Scroll2.box(col, row, w, h, 0x0001u, pal);
+    break;
+  case 3:
+    cps2::Scroll3.box(col, row, w, h, 0x0001u, pal);
+    break;
+  default:
+    cps2::Scroll1.box(col, row, w, h, 0x0001u, pal);
+    break;
+  }
+}
+
+void cps2_scroll_print_uint(uint8_t p, int col, int row, uint8_t pal,
+                            uint32_t v, int min_digits) {
+  switch (p) {
+  case 2:
+    cps2::Scroll2.print_uint(col, row, pal, v, min_digits);
+    break;
+  case 3:
+    cps2::Scroll3.print_uint(col, row, pal, v, min_digits);
+    break;
+  default:
+    cps2::Scroll1.print_uint(col, row, pal, v, min_digits);
+    break;
+  }
+}
+
+void cps2_batch_draw_meta(int16_t x, int16_t y, uint32_t first_tile,
+                          uint8_t w_tiles, uint8_t h_tiles, uint8_t pal,
+                          uint8_t prio, uint8_t flip) {
+  g_c_batch.draw_meta(x, y, first_tile, w_tiles, h_tiles, pal, prio,
+                      static_cast<cps2::SpriteFlip>(flip));
+}
+
+void cps2_anim_reset(Cps2SpriteAnim *a) {
+  a->frame = 0;
+  a->timer = 0;
+  a->finished = false;
+}
+
+void cps2_anim_tick(Cps2SpriteAnim *a) {
+  if (a->finished || a->frame_count <= 1 || a->ticks_per_frame == 0)
+    return;
+  if (++a->timer >= a->ticks_per_frame) {
+    a->timer = 0;
+    if (a->frame + 1 < a->frame_count) {
+      ++a->frame;
+    } else if (a->loop) {
+      a->frame = 0;
+    } else {
+      a->finished = true;
+    }
+  }
+}
+
+uint32_t cps2_anim_tile(const Cps2SpriteAnim *a) {
+  return a->base_tile + static_cast<uint32_t>(a->frame) * a->tiles_per_frame;
+}
+
 void cps2_input_poll(void) { g_c_input.poll(); }
 bool cps2_input_held(uint16_t btn, int player) {
   return g_c_input.held(static_cast<cps2::Button>(btn), player);
