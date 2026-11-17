@@ -1,0 +1,52 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install toolchain dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            curl \
+            gcc-m68k-linux-gnu \
+            g++-m68k-linux-gnu \
+            binutils-m68k-linux-gnu
+
+      - name: Build and install vasmm68k_mot
+        run: |
+          curl -fsSL http://sun.hasenbraten.de/vasm/release/vasm.tar.gz -o vasm.tar.gz
+          tar -xzf vasm.tar.gz
+          cd vasm
+          make CPU=m68k SYNTAX=mot -j"$(nproc)"
+          sudo install -m 0755 vasmm68k_mot /usr/local/bin/vasmm68k_mot
+
+      - name: Build host tools
+        run: |
+          cmake -S tools -B tools/build -G Ninja
+          cmake --build tools/build -j
+
+      - name: Build SDK and example ROMs
+        run: |
+          cmake -S sdk -B sdk/build -G Ninja
+          cmake --build sdk/build -j
+
+      - name: Verify output ROM archives
+        run: |
+          test -f sdk/build/examples/cpp_hello/cpp_hello.zip
+          test -f sdk/build/examples/c_hello/c_hello.zip
+          test -f sdk/build/examples/sprite_demo/sprite_demo.zip
