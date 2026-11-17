@@ -49,6 +49,7 @@ target_compile_options(cps2_sdk INTERFACE
 )
 target_link_options(cps2_sdk INTERFACE
     -m68000 -T "${CMAKE_SOURCE_DIR}/ld/cps2.ld" -nostdlib -lgcc
+    -Wl,--build-id=none
 )
 
 # optional vanilla C11/C17 compatibility wrapper library

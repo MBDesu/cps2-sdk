@@ -58,6 +58,12 @@ SECTIONS
     _ebss = .;
   } > WRAM
 
+  /DISCARD/ : {
+    *(.note*)
+    *(.comment)
+    *(.eh_frame*)
+  }
+
   ASSERT((_etext + SIZEOF(.data)) <= (ORIGIN(ROM) + LENGTH(ROM)), "Error: ROM image exceeds 4 MB CPS2 limit")
   ASSERT(_ebss <= (ORIGIN(WRAM) + LENGTH(WRAM)), "Error: WRAM (.data + .bss) exceeds 64 KB CPS2 limit")
 }
