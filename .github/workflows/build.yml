@@ -29,7 +29,7 @@ jobs:
 
       - name: Build and install vasmm68k_mot
         run: |
-          curl -fsSL http://sun.hasenbraten.de/vasm/release/vasm.tar.gz -o vasm.tar.gz
+          curl -fsSL  https://github.com/erique/vbcc_vasm_vlink/raw/refs/heads/master/vasm.tar.gz -o vasm.tar.gz
           tar -xzf vasm.tar.gz
           cd vasm
           make CPU=m68k SYNTAX=mot -j"$(nproc)"
