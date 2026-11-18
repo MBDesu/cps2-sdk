@@ -104,11 +104,13 @@ void cps2::on_vblank() {
 }
 
 int main() {
-  cps2::video::init(cps2::LayerMask::Scroll1 | cps2::LayerMask::Obj);
+  cps2::video::init(cps2::LayerMask::Scroll3 | cps2::LayerMask::Scroll1 |
+                    cps2::LayerMask::Obj);
   cps2::sprite::clear_all();
 
-  constexpr uint16_t bg = cps2::rgb(0x01, 0x02, 0x04);
-  cps2::palette::set_backdrop(bg);
+  constexpr uint16_t bg = cps2::rgb(0x02, 0x04, 0x09);
+  cps2::video::set_background(bg);
+
   cps2::palette::set_entry(cps2::PalPage::Scroll1, 0, 1,
                            cps2::rgb(0x0f, 0x0f, 0x0f));
   cps2::palette::set_entry(cps2::PalPage::Scroll1, 1, 1,

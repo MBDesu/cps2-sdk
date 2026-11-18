@@ -102,6 +102,9 @@ std::vector<uint8_t> buildBuiltinFontRegion() {
   std::array<uint8_t, 64> blank{};
   blank.fill(0x0f);
 
+  std::array<uint8_t, 64> solid{};
+  solid.fill(0x01);
+
   std::array<uint8_t, 64> checker{};
   for (int y = 0; y < 8; ++y) {
     for (int x = 0; x < 8; ++x) {
@@ -162,6 +165,10 @@ std::vector<uint8_t> buildBuiltinFontRegion() {
   for (int code = 0; code < 128; ++code) {
     if (code == 1) {
       appendTile8x8(region, checker);
+      continue;
+    }
+    if (code == 2 || (code >= 16 && code < 32)) {
+      appendTile8x8(region, solid);
       continue;
     }
     const Glyph *found = nullptr;
@@ -684,7 +691,8 @@ int main(int argc, char **argv) {
         keyWords[1] = static_cast<uint16_t>(k0 & 0xffffu);
         keyWords[2] = static_cast<uint16_t>((k1 >> 16) & 0xffffu);
         keyWords[3] = static_cast<uint16_t>(k1 & 0xffffu);
-        keyWords[9] = 0x0000;
+        keyWords[7] = 0x4000u;
+        keyWords[9] = 0x0000u;
 
         keyFileBytes = encodeKeyFile(keyWords);
         kf.masterKey[0] = k0;
@@ -906,6 +914,11 @@ int main(int argc, char **argv) {
         writeFile(outDir / (romName + ".12"), qsBytes.data() + kQSoundChipBytes,
                   kQSoundChipBytes);
       }
+    }
+
+    constexpr size_t kMinProgChipBytes = 0x80000;
+    if (progBytes.size() < kMinProgChipBytes) {
+      progBytes.resize(kMinProgChipBytes, 0xff);
     }
 
     // byte-swap 68000 program ROM for CPS2 .03 slot

@@ -17,13 +17,16 @@ void cps2_halt_until_vblank(void) { cps2::halt_until_vblank(); }
 void cps2_video_init(uint16_t mask) {
   cps2::video::init(static_cast<cps2::LayerMask>(mask));
 }
+void cps2_video_set_background(uint16_t color) {
+  cps2::video::set_background(color);
+}
 void cps2_scroll2_pos(int16_t x, int16_t y) { cps2::set_scroll2_pos(x, y); }
 void cps2_scroll3_pos(int16_t x, int16_t y) { cps2::set_scroll3_pos(x, y); }
 
 uint16_t cps2_pal_color(uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
   return cps2::rgb(r, g, b, bright);
 }
-void cps2_palette_set_backdrop(uint16_t c) { cps2::palette::set_backdrop(c); }
+void cps2_palette_set_backdrop(uint16_t c) { cps2::video::set_background(c); }
 void cps2_palette_set_entry(uint8_t p, uint8_t s, uint8_t i, uint16_t c) {
   cps2::palette::set_entry(static_cast<cps2::PalPage>(p), s, i, c);
 }

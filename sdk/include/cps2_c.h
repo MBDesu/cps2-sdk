@@ -91,6 +91,7 @@ void cps2_on_vblank(void);
 // System & Video
 void cps2_halt_until_vblank(void);
 void cps2_video_init(uint16_t layer_mask);
+void cps2_video_set_background(uint16_t color);
 void cps2_scroll2_pos(int16_t x, int16_t y);
 void cps2_scroll3_pos(int16_t x, int16_t y);
 

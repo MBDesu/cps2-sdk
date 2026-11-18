@@ -67,11 +67,28 @@ inline void init(LayerMask enable = LayerMask::All) {
   a.scroll2_y = 0;
   a.scroll3_x = 0;
   a.scroll3_y = 0;
+  a.video_ctrl = 0x003eu;
 
   set_layer_order(LayerId::Scroll3, LayerId::Scroll2, LayerId::Scroll1,
                   LayerId::Obj, enable);
+  auto &b = cpsb();
+  b.pri_mask[0] = 0x0000u;
+  b.pri_mask[1] = 0x0000u;
+  b.pri_mask[2] = 0x0000u;
+  b.pri_mask[3] = 0x0000u;
   reg_obj_pri() = 0x6420u;
-  cpsb().pal_ctrl = 0x003fu;
+  b.pal_ctrl = 0x003fu;
+}
+
+inline void set_background(uint16_t color) {
+  palette::set_entry(PalPage::Scroll3, 31u, 1u, color);
+  constexpr uint16_t kSolid32x32Tile = 0x0002u;
+  volatile uint16_t *map = &gfx_ram()[0x6000u];
+  for (uint32_t i = 0; i < 64u * 64u; ++i) {
+    *(map + i * 2u) = kSolid32x32Tile;
+    *(map + i * 2u + 1u) = 31u;
+  }
+  palette::commit();
 }
 
 } // namespace video

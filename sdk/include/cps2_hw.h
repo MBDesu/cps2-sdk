@@ -15,18 +15,24 @@ inline constexpr int kScr1Cols = 48;
 inline constexpr int kScr1Rows = 28;
 
 struct CpsARegs {
-  volatile uint16_t obj_base;       /* +$00: $800100 */
-  volatile uint16_t scroll1_base;   /* +$02: $800102 */
-  volatile uint16_t scroll2_base;   /* +$04: $800104 */
-  volatile uint16_t scroll3_base;   /* +$06: $800106 */
-  volatile uint16_t rowscroll_base; /* +$08: $800108 */
-  volatile uint16_t palette_base;   /* +$0a: $80010a */
-  volatile uint16_t scroll1_x;      /* +$0c: $80010c */
-  volatile uint16_t scroll1_y;      /* +$0e: $80010e */
-  volatile uint16_t scroll2_x;      /* +$10: $800110 */
-  volatile uint16_t scroll2_y;      /* +$12: $800112 */
-  volatile uint16_t scroll3_x;      /* +$14: $800114 */
-  volatile uint16_t scroll3_y;      /* +$16: $800116 */
+  volatile uint16_t obj_base;        /* +$00: $800100 */
+  volatile uint16_t scroll1_base;    /* +$02: $800102 */
+  volatile uint16_t scroll2_base;    /* +$04: $800104 */
+  volatile uint16_t scroll3_base;    /* +$06: $800106 */
+  volatile uint16_t rowscroll_base;  /* +$08: $800108 */
+  volatile uint16_t palette_base;    /* +$0a: $80010a */
+  volatile uint16_t scroll1_x;       /* +$0c: $80010c */
+  volatile uint16_t scroll1_y;       /* +$0e: $80010e */
+  volatile uint16_t scroll2_x;       /* +$10: $800110 */
+  volatile uint16_t scroll2_y;       /* +$12: $800112 */
+  volatile uint16_t scroll3_x;       /* +$14: $800114 */
+  volatile uint16_t scroll3_y;       /* +$16: $800116 */
+  volatile uint16_t stars1_x;        /* +$18: $800118 */
+  volatile uint16_t stars1_y;        /* +$1a: $80011a */
+  volatile uint16_t stars2_x;        /* +$1c: $80011c */
+  volatile uint16_t stars2_y;        /* +$1e: $80011e */
+  volatile uint16_t rowscroll_start; /* +$20: $800120 */
+  volatile uint16_t video_ctrl;      /* +$22: $800122 */
 };
 
 struct CpsBRegs {
@@ -36,7 +42,7 @@ struct CpsBRegs {
   volatile uint16_t mult_res_hi; /* +$06: $800146 */
   uint16_t _pad0[15];            /* +$08..+$24 */
   volatile uint16_t layer_ctrl;  /* +$26: $800166 */
-  volatile uint16_t pri_mask[4]; /* +$28..+$2e */
+  volatile uint16_t pri_mask[4]; /* +$28..+$2e: $800168..$80016e */
   volatile uint16_t pal_ctrl;    /* +$30: $800170 */
   volatile uint16_t board_id;    /* +$32: $800172 */
 };

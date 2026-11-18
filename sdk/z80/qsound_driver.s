@@ -204,6 +204,63 @@ boot_init:
         LD      (0xC008), A                     ; Default master volume = 0x7F
         LD      (0xF004), A
 
+        ; Initialize DL-1425 STATE_NORMAL2 wet & dry filter tables (0x0F73 / 0x0FA4)
+        LD      DE, 0x0F73
+        LD      A, 0xDA                         ; Left wet filter table
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0F73
+        LD      A, 0xDB                         ; Left dry alt-filter table
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0FA4
+        LD      A, 0xDC                         ; Right wet filter table
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0FA4
+        LD      A, 0xDD                         ; Right dry alt-filter table
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0800
+        LD      A, 0xE4                         ; Left filtered (HRTF surround bleed)
+        CALL    write_qsound_raw
+
+        LD      DE, 0x3FFF
+        LD      A, 0xE5                         ; Left unfiltered (dry Left)
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0800
+        LD      A, 0xE6                         ; Right filtered (HRTF surround bleed)
+        CALL    write_qsound_raw
+
+        LD      DE, 0x3FFF
+        LD      A, 0xE7                         ; Right unfiltered (dry Right)
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0000
+        LD      A, 0xDE                         ; Left filtered delay = 0
+        CALL    write_qsound_raw
+
+        LD      DE, 0x002E
+        LD      A, 0xDF                         ; Left unfiltered delay = 46
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0000
+        LD      A, 0xE0                         ; Right filtered delay = 0
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0030
+        LD      A, 0xE1                         ; Right unfiltered delay = 48
+        CALL    write_qsound_raw
+
+        LD      DE, 0x0001
+        LD      A, 0xE2                         ; Latch output delays
+        CALL    write_qsound_raw
+
+        LD      DE, 0x055A
+        LD      A, 0xD9                         ; Reverb delay (0x0554 + 6)
+        CALL    write_qsound_raw
+
         CALL    stop_all_channels
 
         XOR     A
@@ -239,6 +296,14 @@ check_cmd:
         JR      NC, trigger_bgm
 
 trigger_sfx:
+        ; Restore full volume if a previous fade-out reduced (0xC008) to 0
+        LD      A, (0xC008)
+        or      A
+        JR      NZ, sfx_vol_ok
+        LD      A, 0x7F
+        LD      (0xC008), A
+        LD      (0xF004), A
+sfx_vol_ok:
         LD      A, (0xF000)
         LD      C, A
         INC     A
@@ -317,6 +382,9 @@ do_stop_all:
         XOR     A
         LD      (0xF002), A
         LD      (0xF005), A
+        LD      A, 0x7F
+        LD      (0xC008), A
+        LD      (0xF004), A
         CALL    stop_all_channels
         JR      cmd_done
 
@@ -564,10 +632,17 @@ write_qsound_ch:
 
 write_qsound_raw:
         PUSH    AF
+        CALL    wait_qsound_ready
         LD      A, D
         LD      (0xD000), A
         LD      A, E
         LD      (0xD001), A
         POP     AF
         LD      (0xD002), A
+        RET
+
+wait_qsound_ready:
+        LD      A, (0xD007)
+        and     0x80
+        JR      Z, wait_qsound_ready
         RET
