@@ -2,19 +2,12 @@ set(ELF "${CMAKE_CURRENT_BINARY_DIR}/sprite_demo.elf")
 set(BIN "${CMAKE_CURRENT_BINARY_DIR}/sprite_demo.bin")
 set(ROM_DIR "${CMAKE_CURRENT_BINARY_DIR}/rom")
 set(ZIP "${CMAKE_CURRENT_BINARY_DIR}/sprite_demo.zip")
-set(ASSETS_H "${CMAKE_CURRENT_BINARY_DIR}/assets.h")
 
+set(ASSETS_H "${CMAKE_CURRENT_BINARY_DIR}/assets.h")
 set(HERO_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/hero.png")
 set(BG_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/bg_tiles.png")
-set(PACK_ARGS --sprite HERO assets/hero.png 16 --png BG assets/bg_tiles.png 16)
-
-add_custom_command(
-    OUTPUT "${HERO_PNG}" "${BG_PNG}"
-    COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/gen_assets.py"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gen_assets.py"
-    COMMENT "Generating sprite_demo PNG assets"
-)
+set(STARS_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/stars.png")
+set(PACK_ARGS --sprite HERO assets/hero.png 16 --png BG assets/bg_tiles.png 16 --png STARS assets/stars.png 32)
 
 add_custom_command(
     OUTPUT "${ASSETS_H}"
@@ -22,7 +15,7 @@ add_custom_command(
     COMMAND "${CPS2_PACKER}" --prog /dev/null --out-dir "${ROM_DIR}"
             --name hb --header "${ASSETS_H}" ${PACK_ARGS}
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    DEPENDS "${HERO_PNG}" "${BG_PNG}" "${CPS2_PACKER}"
+    DEPENDS "${HERO_PNG}" "${BG_PNG}" "${STARS_PNG}" "${CPS2_PACKER}"
     COMMENT "Generating assets.h for sprite_demo"
 )
 
@@ -46,7 +39,7 @@ add_custom_command(
             "${CMAKE_COMMAND}" -E tar cf "${ZIP}" --format=zip
             hb.03 hb.13 hb.14 hb.15 hb.16 hb.17 hb.18 hb.19 hb.20 ${KEY_FILE}
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    DEPENDS sprite_demo.elf "${CPS2_PACKER}"
+    DEPENDS sprite_demo.elf "${HERO_PNG}" "${BG_PNG}" "${STARS_PNG}" "${CPS2_PACKER}"
     COMMENT "Packing sprite_demo.zip"
 )
 

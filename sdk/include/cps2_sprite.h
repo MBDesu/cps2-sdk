@@ -3,6 +3,8 @@
 #define CPS2_SDK_SPRITE_H
 
 #include "cps2_hw.h"
+#include "cps2_palette.h"
+
 #include <stdint.h>
 
 namespace cps2 {
@@ -16,19 +18,14 @@ enum class SpriteFlip : uint16_t {
   XY = X | Y,
 };
 
-constexpr SpriteFlip operator|(SpriteFlip a, SpriteFlip b) {
-  return static_cast<SpriteFlip>(static_cast<uint16_t>(a) |
-                                 static_cast<uint16_t>(b));
-}
-
 struct Sprite {
   int16_t x = 0;
   int16_t y = 0;
   uint32_t tile = 0;
   uint8_t palette = 0;
   uint8_t priority = 7;
-  uint8_t width_blocks = 1;
-  uint8_t height_blocks = 1;
+  uint8_t w_tiles = 1;
+  uint8_t h_tiles = 1;
   SpriteFlip flip = SpriteFlip::None;
 };
 
@@ -43,6 +40,35 @@ struct SpriteAnim {
   uint8_t timer = 0;
   bool finished = false;
 
+  static constexpr SpriteAnim from_sheet(const TileSheet &sheet,
+                                         uint8_t ticks_per_frame = 6,
+                                         bool loop = true,
+                                         uint32_t tile_offset = 0) {
+    return SpriteAnim{
+        .base_tile = sheet.first_tile + tile_offset,
+        .frame_count = static_cast<uint16_t>(
+            sheet.tile_count > tile_offset ? sheet.tile_count - tile_offset
+                                           : 1u),
+        .tiles_per_frame = 1,
+        .ticks_per_frame = ticks_per_frame,
+        .loop = loop,
+    };
+  }
+
+  static constexpr SpriteAnim
+  from_sheet(const TileSheet &sheet, uint16_t frame_count, uint8_t w_tiles,
+             uint8_t h_tiles, uint8_t ticks_per_frame = 6, bool loop = true,
+             uint32_t tile_offset = 0) {
+    return SpriteAnim{
+        .base_tile = sheet.first_tile + tile_offset,
+        .frame_count = frame_count,
+        .tiles_per_frame = static_cast<uint16_t>(
+            static_cast<uint16_t>(w_tiles) * static_cast<uint16_t>(h_tiles)),
+        .ticks_per_frame = ticks_per_frame,
+        .loop = loop,
+    };
+  }
+
   void reset() {
     frame = 0;
     timer = 0;
@@ -50,8 +76,9 @@ struct SpriteAnim {
   }
 
   void tick() {
-    if (finished || frame_count <= 1 || ticks_per_frame == 0)
+    if (finished || frame_count <= 1 || ticks_per_frame == 0) {
       return;
+    }
     if (++timer >= ticks_per_frame) {
       timer = 0;
       if (frame + 1 < frame_count) {
@@ -68,6 +95,11 @@ struct SpriteAnim {
     return base_tile + static_cast<uint32_t>(frame) * tiles_per_frame;
   }
 };
+
+constexpr SpriteFlip operator|(SpriteFlip a, SpriteFlip b) {
+  return static_cast<SpriteFlip>(static_cast<uint16_t>(a) |
+                                 static_cast<uint16_t>(b));
+}
 
 namespace sprite {
 
@@ -140,7 +172,15 @@ inline void clear_all() { end(0u); }
 
 class SpriteBatch {
 public:
-  void begin() { count_ = 0u; }
+  SpriteBatch() = default;
+
+  SpriteBatch(const SpriteBatch &) = delete;
+  SpriteBatch &operator=(const SpriteBatch &) = delete;
+
+  void begin() {
+    count_ = 0u;
+    ended_ = false;
+  }
 
   void draw_ext(int16_t x, int16_t y, uint32_t tile, uint8_t palette,
                 uint8_t priority, uint8_t width_blocks, uint8_t height_blocks,
@@ -159,9 +199,15 @@ public:
   }
 
   void draw(const Sprite &spr) {
-    const uint8_t w = (spr.width_blocks > 0u) ? spr.width_blocks : 1u;
-    const uint8_t h = (spr.height_blocks > 0u) ? spr.height_blocks : 1u;
-    draw_ext(spr.x, spr.y, spr.tile, spr.palette, spr.priority, w, h, spr.flip);
+    const uint8_t w = (spr.w_tiles > 0u) ? spr.w_tiles : 1u;
+    const uint8_t h = (spr.h_tiles > 0u) ? spr.h_tiles : 1u;
+    if (w == 1u && h == 1u) {
+      draw_ext(spr.x, spr.y, spr.tile, spr.palette, spr.priority, 1u, 1u,
+               spr.flip);
+    } else {
+      draw_meta(spr.x, spr.y, spr.tile, w, h, spr.palette, spr.priority,
+                spr.flip);
+    }
   }
 
   void draw_meta(int16_t x, int16_t y, uint32_t first_tile, uint8_t w_tiles,
@@ -185,12 +231,24 @@ public:
     }
   }
 
-  void end() const { sprite::end(count_); }
+  void end() {
+    if (!ended_) {
+      sprite::end(count_);
+      ended_ = true;
+    }
+  }
 
   [[nodiscard]] uint32_t count() const { return count_; }
 
 private:
   uint32_t count_ = 0u;
+  bool ended_ = false;
+};
+
+class ScopedSpriteBatch : public SpriteBatch {
+public:
+  ScopedSpriteBatch() { begin(); }
+  ~ScopedSpriteBatch() { end(); }
 };
 
 } // namespace cps2

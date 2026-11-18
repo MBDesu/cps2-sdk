@@ -2,6 +2,7 @@
 #include "stb_image.h"
 
 #include "cps2_crypt.h"
+#include "default_z80_driver.h"
 
 #include <algorithm>
 #include <array>
@@ -81,6 +82,15 @@ void appendTile16x16(std::vector<uint8_t> &out,
   const size_t base = out.size();
   out.resize(base + 256, 0x0f);
   for (int i = 0; i < 256; ++i) {
+    out[base + i] = px[i] & 0x0f;
+  }
+}
+
+void appendTile32x32(std::vector<uint8_t> &out,
+                     const std::array<uint8_t, 1024> &px) {
+  const size_t base = out.size();
+  out.resize(base + 1024, 0x0f);
+  for (int i = 0; i < 1024; ++i) {
     out[base + i] = px[i] & 0x0f;
   }
 }
@@ -270,7 +280,14 @@ PackedSheet importPngSheet(const PngSheetSpec &spec,
 
   PackedSheet result;
   result.symbol = spec.symbol;
-  const uint32_t stride = (spec.tileSize == 8) ? 128u : 256u;
+  const uint32_t stride = (spec.tileSize == 8)    ? 128u
+                          : (spec.tileSize == 16) ? 256u
+                                                  : 1024u;
+  const size_t relOffset = decodedGfx.size() - baseOffset;
+  const size_t rem = relOffset % stride;
+  if (rem != 0) {
+    decodedGfx.resize(decodedGfx.size() + (stride - rem), 0x0f);
+  }
   result.firstTile =
       static_cast<uint32_t>((decodedGfx.size() - baseOffset) / stride);
 
@@ -313,7 +330,7 @@ PackedSheet importPngSheet(const PngSheetSpec &spec,
           }
         }
         appendTile8x8(decodedGfx, tile);
-      } else {
+      } else if (spec.tileSize == 16) {
         std::array<uint8_t, 256> tile{};
         for (int y = 0; y < 16; ++y) {
           for (int x = 0; x < 16; ++x) {
@@ -323,6 +340,16 @@ PackedSheet importPngSheet(const PngSheetSpec &spec,
           }
         }
         appendTile16x16(decodedGfx, tile);
+      } else {
+        std::array<uint8_t, 1024> tile{};
+        for (int y = 0; y < 32; ++y) {
+          for (int x = 0; x < 32; ++x) {
+            const size_t p = ((ty * 32 + y) * w + (tx * 32 + x)) * 4;
+            tile[y * 32 + x] = quantizeColor(rgba[p + 0], rgba[p + 1],
+                                             rgba[p + 2], rgba[p + 3]);
+          }
+        }
+        appendTile32x32(decodedGfx, tile);
       }
       result.tileCount++;
     }
@@ -404,8 +431,122 @@ void writeInterleavedGfxRoms(const std::vector<uint8_t> &decodedGfx,
   }
 }
 
+struct WavSpec {
+  bool isBgm = false;
+  std::string symbol;
+  fs::path wavPath;
+};
+
+struct PackedSound {
+  bool isBgm = false;
+  std::string symbol;
+  uint8_t id = 0; // 1..127
+  uint16_t bank = 0x8000;
+  uint16_t startAddr = 0;
+  uint16_t endAddr = 0;
+  uint16_t loopLen = 0;
+  uint16_t pitch = 0x1000;
+  uint8_t chunkCount = 1;
+  uint16_t lastEndAddr = 0;
+  uint16_t lastTicks = 0;
+};
+
+std::vector<uint8_t> decodeWavToQSoundPcm(const fs::path &wavPath, bool isBgm) {
+  const auto data = readFile(wavPath);
+  if (data.size() < 44 || std::memcmp(data.data(), "RIFF", 4) != 0 ||
+      std::memcmp(data.data() + 8, "WAVE", 4) != 0) {
+    throw std::runtime_error("Invalid WAV file: " + wavPath.string());
+  }
+
+  auto readLE16 = [&](size_t off) -> uint16_t {
+    return static_cast<uint16_t>(data[off]) |
+           (static_cast<uint16_t>(data[off + 1]) << 8);
+  };
+  auto readLE32 = [&](size_t off) -> uint32_t {
+    return static_cast<uint32_t>(data[off]) |
+           (static_cast<uint32_t>(data[off + 1]) << 8) |
+           (static_cast<uint32_t>(data[off + 2]) << 16) |
+           (static_cast<uint32_t>(data[off + 3]) << 24);
+  };
+
+  uint16_t audioFormat = 0;
+  uint16_t numChannels = 0;
+  uint32_t sampleRate = 0;
+  uint16_t bitsPerSample = 0;
+  size_t pcmOffset = 0;
+  size_t pcmSize = 0;
+
+  size_t pos = 12;
+  while (pos + 8 <= data.size()) {
+    const uint32_t chunkSize = readLE32(pos + 4);
+    if (std::memcmp(data.data() + pos, "fmt ", 4) == 0 && chunkSize >= 16) {
+      audioFormat = readLE16(pos + 8);
+      numChannels = readLE16(pos + 10);
+      sampleRate = readLE32(pos + 12);
+      bitsPerSample = readLE16(pos + 22);
+    } else if (std::memcmp(data.data() + pos, "data", 4) == 0) {
+      pcmOffset = pos + 8;
+      pcmSize = std::min<size_t>(chunkSize, data.size() - pcmOffset);
+      break;
+    }
+    pos += 8 + chunkSize + (chunkSize & 1u);
+  }
+
+  if (audioFormat != 1 || (bitsPerSample != 8 && bitsPerSample != 16) ||
+      numChannels == 0 || sampleRate == 0 || pcmOffset == 0 || pcmSize == 0) {
+    throw std::runtime_error(
+        "Unsupported WAV format (need uncompressed 8/16-bit PCM): " +
+        wavPath.string());
+  }
+
+  const size_t bytesPerSample = bitsPerSample / 8;
+  const size_t frameStride = bytesPerSample * numChannels;
+  const size_t srcFrames = pcmSize / frameStride;
+
+  std::vector<int8_t> mono(srcFrames);
+  for (size_t i = 0; i < srcFrames; ++i) {
+    int32_t sum = 0;
+    for (uint16_t ch = 0; ch < numChannels; ++ch) {
+      const size_t off = pcmOffset + i * frameStride + ch * bytesPerSample;
+      if (bitsPerSample == 8) {
+        sum += static_cast<int32_t>(data[off]) - 128;
+      } else {
+        const int16_t s16 = static_cast<int16_t>(readLE16(off));
+        sum += (s16 >> 8);
+      }
+    }
+    int32_t avg = sum / numChannels;
+    avg = std::max<int32_t>(-127, std::min<int32_t>(127, avg));
+    mono[i] = static_cast<int8_t>(avg);
+  }
+
+  // Resample to QSound native 24038 Hz:
+  //   - SFX capped at 0x7fe0 samples (~1.36s, single bank)
+  //   - BGM capped at 32 * 31937 samples (~42.5s across 32 banks of hb.11)
+  constexpr double kQSoundRate = 24038.0;
+  constexpr size_t kMaxSfxFrames = 0x7fe0u;
+  constexpr size_t kMaxBgmFrames = 32u * 31937u;
+  const size_t maxFrames = isBgm ? kMaxBgmFrames : kMaxSfxFrames;
+
+  size_t dstFrames =
+      static_cast<size_t>((static_cast<double>(srcFrames) * kQSoundRate) /
+                          static_cast<double>(sampleRate));
+  dstFrames = std::max<size_t>(1, std::min<size_t>(dstFrames, maxFrames));
+
+  std::vector<uint8_t> out(dstFrames);
+  for (size_t i = 0; i < dstFrames; ++i) {
+    const size_t srcIdx = std::min<size_t>(
+        srcFrames - 1,
+        static_cast<size_t>((static_cast<double>(i) * sampleRate) /
+                            kQSoundRate));
+    out[i] = static_cast<uint8_t>(mono[srcIdx]);
+  }
+  return out;
+}
+
 void writeAssetsHeader(const fs::path &headerPath,
-                       const std::vector<PackedSheet> &sheets) {
+                       const std::vector<PackedSheet> &sheets,
+                       const std::vector<PackedSound> &sounds) {
   std::ofstream out(headerPath);
   if (!out.is_open()) {
     throw std::runtime_error("Failed to open assets header: " +
@@ -424,7 +565,21 @@ void writeAssetsHeader(const fs::path &headerPath,
       std::snprintf(hexBuf, sizeof(hexBuf), "0x%04Xu", s.palette[i]);
       out << hexBuf;
     }
-    out << "};\n\n";
+    out << "};\n";
+    out << "#if defined(CPS2_SDK_PALETTE_H)\n";
+    out << "static constexpr cps2::TileSheet " << s.symbol << "_SHEET{"
+        << s.symbol << "_FIRST_TILE, " << s.symbol << "_TILE_COUNT, "
+        << s.symbol << "_PALETTE};\n";
+    out << "#elif defined(CPS2_SDK_CPS2_C_MODULE)\n";
+    out << "static const Cps2TileSheet " << s.symbol << "_SHEET = {" << s.symbol
+        << "_FIRST_TILE, " << s.symbol << "_TILE_COUNT, " << s.symbol
+        << "_PALETTE};\n";
+    out << "#endif\n\n";
+  }
+  for (const auto &snd : sounds) {
+    const uint16_t cmdId = snd.isBgm ? (0x80u | snd.id) : snd.id;
+    out << "#define " << snd.symbol << "_ID 0x" << std::hex << std::uppercase
+        << cmdId << std::dec << "u\n";
   }
 }
 
@@ -443,6 +598,9 @@ int main(int argc, char **argv) {
     std::string romName = "hb";
     bool doEncrypt = false;
     std::vector<PngSheetSpec> pngSpecs;
+    std::vector<WavSpec> wavSpecs;
+    fs::path z80Path;
+    fs::path qsoundPath;
 
     for (int i = 1; i < argc; ++i) {
       const std::string arg = argv[i];
@@ -473,6 +631,16 @@ int main(int argc, char **argv) {
         customK0 = static_cast<u32>(std::stoul(argv[++i], nullptr, 16));
         customK1 = static_cast<u32>(std::stoul(argv[++i], nullptr, 16));
         doEncrypt = true;
+      } else if (arg == "--z80" && i + 1 < argc) {
+        z80Path = argv[++i];
+      } else if (arg == "--qsound" && i + 1 < argc) {
+        qsoundPath = argv[++i];
+      } else if ((arg == "--sfx" || arg == "--bgm") && i + 2 < argc) {
+        WavSpec ws;
+        ws.isBgm = (arg == "--bgm");
+        ws.symbol = argv[++i];
+        ws.wavPath = argv[++i];
+        wavSpecs.push_back(std::move(ws));
       }
     }
 
@@ -567,11 +735,180 @@ int main(int argc, char **argv) {
       }
     }
 
-    if (!headerOut.empty()) {
-      writeAssetsHeader(headerOut, packedSheets);
+    std::vector<PackedSound> packedSounds;
+    std::vector<uint8_t> qsBytes;
+    if (!qsoundPath.empty()) {
+      qsBytes = readFile(qsoundPath);
     }
 
-    // Byte-swap 68000 program ROM for CPS2 .03 slot
+    constexpr size_t kStreamChunkSamples =
+        31937u; // 335 Z80 IRQs @ 252 Hz (~1.33s)
+
+    for (size_t idx = 0; idx < wavSpecs.size(); ++idx) {
+      if (idx >= 127) {
+        throw std::runtime_error("Maximum 127 WAV samples supported");
+      }
+      const auto &ws = wavSpecs[idx];
+      const auto pcm = decodeWavToQSoundPcm(ws.wavPath, ws.isBgm);
+
+      if (ws.isBgm && pcm.size() > kStreamChunkSamples) {
+        // Multi-bank BGM streaming: align to next 64 KB bank boundary
+        if ((qsBytes.size() & 0xffffu) != 0) {
+          const size_t nextBankOffset = (qsBytes.size() + 0x10000u) & ~0xffffu;
+          qsBytes.resize(nextBankOffset, 0x00);
+        }
+
+        const size_t numChunks =
+            (pcm.size() + kStreamChunkSamples - 1u) / kStreamChunkSamples;
+        if (numChunks > 32u ||
+            qsBytes.size() + numChunks * 0x10000u > 0x200000u) {
+          throw std::runtime_error("Streaming BGM exceeds 2 MB QSound ROM");
+        }
+
+        const uint16_t firstBank =
+            static_cast<uint16_t>(0x8000u | (qsBytes.size() >> 16));
+        uint16_t lastEndAddr = 0;
+        uint16_t lastTicks = 1;
+
+        for (size_t c = 0; c < numChunks; ++c) {
+          const size_t chunkStart = c * kStreamChunkSamples;
+          const size_t chunkLen =
+              std::min<size_t>(kStreamChunkSamples, pcm.size() - chunkStart);
+
+          // Place chunk at offset 0x0000 of its own 64 KB bank
+          qsBytes.insert(qsBytes.end(), pcm.begin() + chunkStart,
+                         pcm.begin() + chunkStart + chunkLen);
+
+          for (size_t pad = 0; pad < 16; ++pad) {
+            const size_t nextIdx = (chunkStart + chunkLen + pad) % pcm.size();
+            qsBytes.push_back(pcm[nextIdx]);
+          }
+
+          if (c + 1 == numChunks) {
+            lastEndAddr = static_cast<uint16_t>(chunkLen);
+            // 95.3333 samples per 252 Hz Z80 IRQ (286 / 3)
+            const uint32_t ticks =
+                static_cast<uint32_t>((chunkLen * 3u + 143u) / 286u);
+            lastTicks = static_cast<uint16_t>(std::max<uint32_t>(1u, ticks));
+          }
+
+          // Pad bank to full 64 KB (0x10000) so the next chunk lands on bank +
+          // 1
+          const size_t rem = qsBytes.size() & 0xffffu;
+          if (rem != 0) {
+            qsBytes.resize(qsBytes.size() + (0x10000u - rem), 0x00);
+          }
+        }
+
+        PackedSound ps;
+        ps.isBgm = true;
+        ps.symbol = ws.symbol;
+        ps.id = static_cast<uint8_t>(idx + 1);
+        ps.bank = firstBank;
+        ps.startAddr = 0x0000u;
+        ps.endAddr = static_cast<uint16_t>(kStreamChunkSamples);
+        ps.loopLen = 0x0001u;
+        ps.pitch = 0x1000u;
+        ps.chunkCount = static_cast<uint8_t>(numChunks);
+        ps.lastEndAddr = lastEndAddr;
+        ps.lastTicks = lastTicks;
+        packedSounds.push_back(ps);
+      } else {
+        // Single-bank SFX or short BGM loop
+        while ((qsBytes.size() & 0xffu) != 0) {
+          qsBytes.push_back(0x00);
+        }
+
+        const size_t totalLen = pcm.size() + 16;
+        if ((qsBytes.size() & 0xffffu) + totalLen > 0x8000u) {
+          const size_t nextBankOffset = (qsBytes.size() + 0x10000u) & ~0xffffu;
+          qsBytes.resize(nextBankOffset, 0x00);
+        }
+        if (qsBytes.size() + totalLen > 0x200000u) {
+          throw std::runtime_error("QSound sample ROM (2 MB) exceeded");
+        }
+
+        PackedSound ps;
+        ps.isBgm = ws.isBgm;
+        ps.symbol = ws.symbol;
+        ps.id = static_cast<uint8_t>(idx + 1);
+        ps.bank = static_cast<uint16_t>(0x8000u | (qsBytes.size() >> 16));
+        ps.startAddr = static_cast<uint16_t>(qsBytes.size() & 0x7fffu);
+        qsBytes.insert(qsBytes.end(), pcm.begin(), pcm.end());
+        qsBytes.insert(qsBytes.end(), 16, 0x00);
+        ps.endAddr = static_cast<uint16_t>((qsBytes.size() - 1) & 0x7fffu);
+        ps.loopLen = ws.isBgm ? static_cast<uint16_t>(ps.endAddr - ps.startAddr)
+                              : 0x0001u;
+        ps.pitch = 0x1000u;
+        ps.chunkCount = 1u;
+        ps.lastEndAddr = ps.endAddr;
+        ps.lastTicks = 0u;
+        packedSounds.push_back(ps);
+      }
+    }
+
+    if (!headerOut.empty()) {
+      writeAssetsHeader(headerOut, packedSheets, packedSounds);
+    }
+
+    if (!z80Path.empty() || !packedSounds.empty()) {
+      constexpr size_t kZ80ChipBytes = 0x20000; // 128 KB per audiocpu chip
+      std::vector<uint8_t> z80Bytes;
+      if (!z80Path.empty()) {
+        z80Bytes = readFile(z80Path);
+      } else {
+        z80Bytes.assign(std::begin(kDefaultZ80Driver),
+                        std::end(kDefaultZ80Driver));
+      }
+
+      const size_t totalZ80 = (z80Bytes.size() > kZ80ChipBytes)
+                                  ? (kZ80ChipBytes * 2)
+                                  : kZ80ChipBytes;
+      z80Bytes.resize(totalZ80, 0x00);
+
+      // Patch WAV sample descriptors into Z80 sample table (0x0400 + id * 16)
+      for (const auto &ps : packedSounds) {
+        const size_t off = 0x0400u + static_cast<size_t>(ps.id) * 16u;
+        z80Bytes[off + 0] = static_cast<uint8_t>((ps.startAddr >> 8) & 0xffu);
+        z80Bytes[off + 1] = static_cast<uint8_t>(ps.startAddr & 0xffu);
+        z80Bytes[off + 2] = static_cast<uint8_t>((ps.endAddr >> 8) & 0xffu);
+        z80Bytes[off + 3] = static_cast<uint8_t>(ps.endAddr & 0xffu);
+        z80Bytes[off + 4] = static_cast<uint8_t>((ps.loopLen >> 8) & 0xffu);
+        z80Bytes[off + 5] = static_cast<uint8_t>(ps.loopLen & 0xffu);
+        z80Bytes[off + 6] = static_cast<uint8_t>((ps.pitch >> 8) & 0xffu);
+        z80Bytes[off + 7] = static_cast<uint8_t>(ps.pitch & 0xffu);
+        z80Bytes[off + 8] = static_cast<uint8_t>((ps.bank >> 8) & 0xffu);
+        z80Bytes[off + 9] = static_cast<uint8_t>(ps.bank & 0xffu);
+        z80Bytes[off + 10] = ps.chunkCount;
+        z80Bytes[off + 11] =
+            static_cast<uint8_t>((ps.lastEndAddr >> 8) & 0xffu);
+        z80Bytes[off + 12] = static_cast<uint8_t>(ps.lastEndAddr & 0xffu);
+        z80Bytes[off + 13] = static_cast<uint8_t>((ps.lastTicks >> 8) & 0xffu);
+        z80Bytes[off + 14] = static_cast<uint8_t>(ps.lastTicks & 0xffu);
+      }
+
+      writeFile(outDir / (romName + ".01"), z80Bytes.data(), kZ80ChipBytes);
+      if (totalZ80 > kZ80ChipBytes) {
+        writeFile(outDir / (romName + ".02"), z80Bytes.data() + kZ80ChipBytes,
+                  kZ80ChipBytes);
+      }
+    }
+
+    if (!qsBytes.empty()) {
+      constexpr size_t kQSoundChipBytes =
+          0x200000; // 2 MB per qsound sample chip
+      const size_t totalQs = (qsBytes.size() > kQSoundChipBytes)
+                                 ? (kQSoundChipBytes * 2)
+                                 : kQSoundChipBytes;
+      qsBytes.resize(totalQs, 0x00);
+      writeFile(outDir / (romName + ".11"), qsBytes.data(), kQSoundChipBytes);
+      if (totalQs > kQSoundChipBytes) {
+        writeFile(outDir / (romName + ".12"), qsBytes.data() + kQSoundChipBytes,
+                  kQSoundChipBytes);
+      }
+    }
+
+    // byte-swap 68000 program ROM for CPS2 .03 slot
     std::vector<uint8_t> swappedProg(progBytes.size());
     for (size_t i = 0; i < progBytes.size(); i += 2) {
       swappedProg[i + 0] = progBytes[i + 1];

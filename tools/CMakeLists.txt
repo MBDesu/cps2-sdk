@@ -14,11 +14,35 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
+set(Z80_ASM_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/z80/asm_z80.py")
+set(Z80_DRIVER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/z80/qsound_driver.s")
+set(Z80_DRIVER_BIN "${CMAKE_CURRENT_BINARY_DIR}/qsound_driver.bin")
+set(Z80_DRIVER_HDR "${CMAKE_CURRENT_BINARY_DIR}/default_z80_driver.h")
+
+add_custom_command(
+    OUTPUT "${Z80_DRIVER_BIN}" "${Z80_DRIVER_HDR}"
+    COMMAND python3 "${Z80_ASM_SCRIPT}" "${Z80_DRIVER_SRC}" "${Z80_DRIVER_BIN}"
+            --header "${Z80_DRIVER_HDR}"
+    DEPENDS "${Z80_ASM_SCRIPT}" "${Z80_DRIVER_SRC}"
+    COMMENT "Embedding default Z80 QSound driver into cps2_packer"
+)
+
 add_executable(cps2_packer
     cps2_packer.cpp
     cps2_crypt.cpp
+    "${Z80_DRIVER_HDR}"
 )
 target_include_directories(cps2_packer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}"
     "${stb_SOURCE_DIR}"
 )
+
+# add_executable(cps2_lift
+#     cps2_lift.cpp
+#     cps2_lift_decoder.cpp
+# )
+# target_include_directories(cps2_lift PRIVATE
+#     "${CMAKE_CURRENT_SOURCE_DIR}"
+# )
+#

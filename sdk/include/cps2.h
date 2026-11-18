@@ -2,9 +2,11 @@
 #ifndef SDK_CPS2_MODULE_H
 #define SDK_CPS2_MODULE_H
 
+#include "cps2_hw.h"
 #include "cps2_input.h"
 #include "cps2_palette.h"
 #include "cps2_scroll.h"
+#include "cps2_sound.h"
 #include "cps2_sprite.h"
 
 static inline uint16_t cps2_rgb(uint8_t bright, uint8_t r, uint8_t g,

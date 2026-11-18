@@ -45,7 +45,7 @@ target_compile_features(cps2_sdk INTERFACE cxx_std_20)
 target_compile_options(cps2_sdk INTERFACE
     -m68000 -O2 -Wall -Wextra
     -ffreestanding -fno-exceptions -fno-jump-tables -nostdlib
-    $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti -fno-threadsafe-statics>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit>
 )
 target_link_options(cps2_sdk INTERFACE
     -m68000 -T "${CMAKE_SOURCE_DIR}/ld/cps2.ld" -nostdlib
@@ -58,6 +58,9 @@ add_library(cps2_sdk_c OBJECT
     "${CMAKE_SOURCE_DIR}/src/cps2_c.cpp"
 )
 target_link_libraries(cps2_sdk_c PUBLIC cps2_sdk)
+
+set(CPS2_Z80_DRIVER "${CMAKE_CURRENT_BINARY_DIR}/z80/qsound_driver.bin")
+add_subdirectory(z80)
 
 if(CPS2_BUILD_EXAMPLES)
     add_subdirectory(examples)

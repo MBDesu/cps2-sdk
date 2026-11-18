@@ -7,6 +7,18 @@
 
 namespace cps2 {
 
+struct TileSheet {
+  uint32_t first_tile;
+  uint32_t tile_count;
+  const uint16_t *palette;
+
+  constexpr uint16_t tile(uint32_t offset = 0) const {
+    const uint32_t clamped =
+        (tile_count > 0u && offset >= tile_count) ? (tile_count - 1u) : offset;
+    return static_cast<uint16_t>(first_tile + clamped);
+  }
+};
+
 enum class PalPage : uint32_t {
   Obj = 0,
   Scroll1 = 1,
@@ -38,6 +50,10 @@ inline void load(PalPage page, uint32_t slot, const uint16_t *colors16) {
     asm volatile("" : "+r"(dst));
     dst[i] = colors16[i];
   }
+}
+
+inline void load(PalPage page, uint32_t slot, const TileSheet &sheet) {
+  load(page, slot, sheet.palette);
 }
 
 inline void load_faded(PalPage page, uint32_t slot, const uint16_t *colors16,

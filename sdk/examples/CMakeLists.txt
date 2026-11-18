@@ -1,3 +1,5 @@
 add_subdirectory(cpp_hello)
 add_subdirectory(c_hello)
 add_subdirectory(sprite_demo)
+add_subdirectory(big_sprite_demo)
+add_subdirectory(audio_demo)

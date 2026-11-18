@@ -15,13 +15,8 @@ bool g_facing_left = false;
 bool g_moving = false;
 int32_t g_world_x = 0;
 
-cps2::SpriteAnim g_walk_anim{
-    .base_tile = HERO_FIRST_TILE,
-    .frame_count = HERO_TILE_COUNT,
-    .tiles_per_frame = 1,
-    .ticks_per_frame = 8,
-    .loop = true,
-};
+cps2::SpriteAnim g_walk_anim =
+    cps2::SpriteAnim::from_sheet(HERO_SHEET, 8, true);
 
 constexpr int16_t kGroundY = 160;
 } // namespace
@@ -98,7 +93,9 @@ int main() {
 
   cps2::palette::load(cps2::PalPage::Obj, 0, HERO_PALETTE);
   cps2::palette::load(cps2::PalPage::Scroll2, 0, BG_PALETTE);
-  cps2::palette::load(cps2::PalPage::Scroll3, 0, BG_PALETTE);
+  cps2::palette::load(cps2::PalPage::Scroll3, 0, STARS_PALETTE);
+  cps2::palette::set_entry(cps2::PalPage::Scroll3, 0, 0,
+                           cps2::rgb(0x01, 0x01, 0x03));
 
   cps2::palette::set_entry(cps2::PalPage::Scroll1, 0, 1,
                            cps2::rgb(0x0f, 0x0f, 0x0f));
@@ -107,7 +104,7 @@ int main() {
   cps2::palette::commit();
 
   cps2::Scroll3.clear(static_cast<uint16_t>(BG_FIRST_TILE), 0);
-  cps2::Scroll2.clear(0x0000u, 0);
+  cps2::Scroll2.clear(0x0011u, 0);
   cps2::Scroll2.fill_rect(0, 12, 64, 4,
                           static_cast<uint16_t>(BG_FIRST_TILE + 1u), 0);
 

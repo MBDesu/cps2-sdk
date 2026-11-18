@@ -3,6 +3,8 @@
 #define CPS2_SDK_SCROLL_H
 
 #include "cps2_hw.h"
+#include "cps2_palette.h"
+
 #include <stdint.h>
 
 namespace cps2 {
@@ -68,7 +70,7 @@ inline void init(LayerMask enable = LayerMask::All) {
 
   set_layer_order(LayerId::Scroll3, LayerId::Scroll2, LayerId::Scroll1,
                   LayerId::Obj, enable);
-  reg_obj_pri() = 0x7531u;
+  reg_obj_pri() = 0x6420u;
   cpsb().pal_ctrl = 0x003fu;
 }
 
@@ -76,11 +78,50 @@ inline void init(LayerMask enable = LayerMask::All) {
 
 class ScrollPlane {
 public:
-  constexpr explicit ScrollPlane(uint32_t word_base) : word_base_(word_base) {}
+  void clear(const TileSheet &sheet, uint8_t palette = 0,
+             uint32_t tile_offset = 0) const {
+    clear(sheet.tile(tile_offset), palette);
+  }
 
-  static constexpr uint32_t entry_index(int col, int row) {
+  void fill_rect(int col, int row, int width, int height,
+                 const TileSheet &sheet, uint32_t tile_offset = 0,
+                 uint8_t palette = 0) const {
+    fill_rect(col, row, width, height, sheet.tile(tile_offset), palette);
+  }
+  constexpr explicit ScrollPlane(uint32_t word_base, uint8_t tile_size = 8)
+      : word_base_(word_base), tile_size_(tile_size) {}
+
+  constexpr uint32_t entry_index(int col, int row) const {
+    if (tile_size_ == 16) {
+      return static_cast<uint32_t>(((row & 0x30) << 6) | ((col & 0x3f) << 4) |
+                                   (row & 0x0f));
+    }
+    if (tile_size_ == 32) {
+      return static_cast<uint32_t>(((row & 0x38) << 6) | ((col & 0x3f) << 3) |
+                                   (row & 0x07));
+    }
     return static_cast<uint32_t>(((row & 0x20) << 6) | ((col & 0x3f) << 5) |
                                  (row & 0x1f));
+  }
+
+  void clear_transparent(uint8_t palette = 0) const {
+    const uint16_t blank_tile =
+        (tile_size_ == 8) ? 0x0020u : ((tile_size_ == 16) ? 0x0011u : 0x0001u);
+    clear(blank_tile, palette);
+  }
+
+  void set_pos(int16_t x, int16_t y) const {
+    auto &a = cpsa();
+    if (tile_size_ == 8) {
+      a.scroll1_x = x;
+      a.scroll1_y = y;
+    } else if (tile_size_ == 16) {
+      a.scroll2_x = x;
+      a.scroll2_y = y;
+    } else {
+      a.scroll3_x = x;
+      a.scroll3_y = y;
+    }
   }
 
   void put(int col, int row, uint16_t tile, uint8_t palette = 0,
@@ -188,11 +229,12 @@ public:
 
 private:
   uint32_t word_base_;
+  uint8_t tile_size_;
 };
 
-inline constexpr ScrollPlane Scroll1{0x2000u};
-inline constexpr ScrollPlane Scroll2{0x4000u};
-inline constexpr ScrollPlane Scroll3{0x6000u};
+inline constexpr ScrollPlane Scroll1{0x2000u, 8};
+inline constexpr ScrollPlane Scroll2{0x4000u, 16};
+inline constexpr ScrollPlane Scroll3{0x6000u, 32};
 
 inline void set_scroll1_pos(int16_t x, int16_t y) {
   cpsa().scroll1_x = static_cast<uint16_t>(x);
